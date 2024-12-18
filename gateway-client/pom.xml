@@ -10,6 +10,8 @@
     </parent>
 
     <artifactId>gateway-client</artifactId>
+    <packaging>jar</packaging>
+    <description>提供给下游服务使用，把下游服务也注册到注册中心</description>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>

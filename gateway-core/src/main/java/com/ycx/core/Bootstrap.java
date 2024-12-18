@@ -1,10 +1,25 @@
 package com.ycx.core;
 
+import com.alibaba.fastjson.JSON;
+import com.ycx.common.config.DynamicConfigManager;
+import com.ycx.common.config.ServiceDefinition;
+import com.ycx.common.config.ServiceInstance;
+import com.ycx.common.utils.NetUtils;
+import com.ycx.common.utils.TimeUtil;
+import com.ycx.gateway.register.center.api.RegisterCenter;
+import com.ycx.gateway.register.center.nacos.NacosRegisterCenter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Map;
+
+import static com.ycx.common.constants.BasicConst.COLON_SEPARATOR;
+
+@Slf4j
 public class Bootstrap {
 
     public static void main(String[] args) {
         // 加载网关核心静态配置
-        Config config = ConfigLoader.getInstance().load(args);
+        final Config config = ConfigLoader.getInstance().load(args);
         System.out.println("working on " + config.getPort());
         // 插件初始化
 
@@ -15,8 +30,51 @@ public class Bootstrap {
         container.start();
 
         // 连接注册中心，将注册中心的实例加载到本地
+        final RegisterCenter registerCenter = registerAndSubscribe(config);
 
         // 服务优雅关机
+        Runtime.getRuntime().addShutdownHook(new Thread(
+                () -> registerCenter.deregister(buildGatewayServiceDefinition(config), buildGatewayServiceInstance(config))
+        ));
 
+    }
+
+    public static RegisterCenter registerAndSubscribe(Config config) {
+        final RegisterCenter registerCenter = new NacosRegisterCenter();
+        // TODO 注册中心配置
+//        registerCenter.init();
+
+        ServiceDefinition serviceDefinition = buildGatewayServiceDefinition(config);
+        ServiceInstance serviceInstance = buildGatewayServiceInstance(config);
+
+        registerCenter.register(serviceDefinition, serviceInstance);
+
+        registerCenter.subscribeAllServices((definition, serviceInstanceSet) -> {
+            log.info("refresh service and instance {} {}", definition.getUniqueId(), JSON.toJSON(serviceInstanceSet));
+            DynamicConfigManager manager = DynamicConfigManager.getInstance();
+            manager.addServiceInstance(definition.getUniqueId(), serviceInstanceSet);
+        });
+
+        return registerCenter;
+    }
+
+    public static ServiceInstance buildGatewayServiceInstance(Config config) {
+        String localIp = NetUtils.getLocalIp();
+        Integer port = config.getPort();
+        ServiceInstance serviceInstance = new ServiceInstance();
+        serviceInstance.setIp(localIp);
+        serviceInstance.setPort(port);
+        serviceInstance.setServiceInstanceId(localIp + COLON_SEPARATOR + port);
+        serviceInstance.setRegisterTime(TimeUtil.currentTimeMillis());
+        return serviceInstance;
+    }
+
+    public static ServiceDefinition buildGatewayServiceDefinition(Config config) {
+        ServiceDefinition serviceDefinition = new ServiceDefinition();
+        serviceDefinition.setInvokerMap(Map.of());
+        serviceDefinition.setUniqueId(config.getApplicationName());
+        serviceDefinition.setServiceId(config.getApplicationName());
+        serviceDefinition.setEnvType(config.getEnv());
+        return serviceDefinition;
     }
 }
