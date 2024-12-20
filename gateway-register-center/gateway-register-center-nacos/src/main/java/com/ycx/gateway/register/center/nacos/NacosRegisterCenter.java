@@ -21,10 +21,7 @@ import com.ycx.gateway.register.center.api.RegisterCenterListener;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections.CollectionUtils;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -41,7 +38,7 @@ public class NacosRegisterCenter implements RegisterCenter {
 
     private NamingMaintainService namingMaintainService;
 
-    private List<RegisterCenterListener> listeners;
+    private List<RegisterCenterListener> listeners = new ArrayList<>();
 
 
     @Override
@@ -50,8 +47,8 @@ public class NacosRegisterCenter implements RegisterCenter {
         this.env = env;
 
         try {
-            this.namingService = NamingFactory.createNamingService(registerAddress);
-            this.namingMaintainService = NamingMaintainFactory.createMaintainService(registerAddress);
+            this.namingService = NamingFactory.createNamingService(this.registerAddress);
+            this.namingMaintainService = NamingMaintainFactory.createMaintainService(this.registerAddress);
         } catch (NacosException e) {
             throw new RuntimeException(e);
         }
@@ -109,7 +106,7 @@ public class NacosRegisterCenter implements RegisterCenter {
                     if (subscribeServices.contains(service)) {
                         continue;
                     }
-                    namingService.subscribe(service, eventListener);
+                    namingService.subscribe(service, env, eventListener);
                     log.info("subscribe service {} {}", service, env);
                 }
                 serviceList = namingService.getServicesOfServer(++pageNo, pageSize, env).getData();
@@ -124,6 +121,7 @@ public class NacosRegisterCenter implements RegisterCenter {
 
         @Override
         public void onEvent(Event event) {
+            log.info("receive event {}", JSON.toJSONString(event));
             if (event instanceof NamingEvent namingEvent) {
                 String serviceName = namingEvent.getServiceName();
                 try {
